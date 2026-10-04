@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html><head><base target="_top"><meta charset="utf-8">
+<style>
+*{box-sizing:border-box}body{font-family:system-ui,sans-serif;margin:0;background:#f4f1ea;color:#222}
+header{background:#3b2a1a;color:#e8c872;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+nav{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;background:#fff;border-bottom:1px solid #ddd}
+nav button{background:#eee;border:0;padding:8px 12px;border-radius:6px;cursor:pointer}nav button.on{background:#3b2a1a;color:#e8c872}
+main{padding:16px;max-width:1000px;margin:auto}.card{background:#fff;border-radius:10px;padding:14px;margin-bottom:14px;box-shadow:0 1px 3px #0002}
+input,select{padding:9px;margin:4px 4px 4px 0;border:1px solid #bbb;border-radius:6px;font-size:15px}
+button.p{background:#3b2a1a;color:#e8c872;border:0;padding:10px 16px;border-radius:6px;cursor:pointer;font-size:15px}
+button.s{background:#eee;border:0;padding:5px 9px;border-radius:5px;cursor:pointer}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:7px;border-bottom:1px solid #eee;text-align:left}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.k{background:#3b2a1a;color:#e8c872;border-radius:10px;padding:14px}.k b{display:block;font-size:20px;color:#fff}
+.msg{padding:10px;border-radius:6px;margin:8px 0}.ok{background:#dff3e0}.er{background:#fde0e0}
+#login{max-width:340px;margin:60px auto}
+</style></head><body>
+<header><b>NDUDES HOTEL · VIP WALLET</b><span id="who"></span></header>
+<div id="app"></div>
+<script>
+let T=sessionStorage.getItem('t')||'',ROLE=sessionStorage.getItem('r')||'',NAME='',CART={},CUST=null,MENU=[];
+const $=id=>document.getElementById(id),kes=n=>'KSh '+Number(n).toLocaleString();
+function run(fn,...a){return new Promise((ok,no)=>google.script.run.withSuccessHandler(ok).withFailureHandler(e=>{
+  const m=String(e.message||e).replace(/^Error: /,'');if(m.includes('SESSION_EXPIRED')){sessionStorage.clear();location.reload();}no(m);}).api(T,fn,a));}
+function flash(id,m,good){$(id).innerHTML='<div class="msg '+(good?'ok':'er')+'">'+m+'</div>';}
+const E=e=>String(e.message||e).replace(/^Error: /,'');
+function loginView(){$('app').innerHTML='<div id="login" class="card"><h3>Sign in</h3><input id="c" placeholder="ADMIN or CASH-001" style="width:100%"><input id="p" type="password" placeholder="Password / PIN" style="width:100%"><button class="p" onclick="doLogin()">Continue</button><div id="m"></div></div>';}
+function doLogin(){google.script.run.withSuccessHandler(r=>{if(r.otp){$('login').innerHTML='<h3>Enter OTP</h3><p>Sent to your registered email.</p><input id="o" placeholder="6-digit code" style="width:100%"><button class="p" onclick="doOtp()">Verify</button><div id="m"></div>';}else start(r.token,'ADMIN');})
+ .withFailureHandler(e=>flash('m',E(e))).login($('c').value,$('p').value);window.CODE=$('c').value;}
+function doOtp(){google.script.run.withSuccessHandler(r=>start(r.token,'CASHIER')).withFailureHandler(e=>flash('m',E(e))).verifyOtp(window.CODE,$('o').value);}
+function start(t,r){T=t;ROLE=r;sessionStorage.setItem('t',t);sessionStorage.setItem('r',r);shell();}
+function logout(){sessionStorage.clear();location.reload();}
+function shell(){
+ const tabs=ROLE==='ADMIN'?['Dashboard','Customers','Wallet','Menu','Cashiers','Sales','Audit']:['Bill'];
+ $('who').innerHTML=ROLE+' <button class="s" onclick="logout()">Logout</button>';
+ $('app').innerHTML='<nav>'+tabs.map(t=>'<button id="t_'+t+'" onclick="tab(\''+t+'\')">'+t+'</button>').join('')+'</nav><main id="main"></main>';tab(tabs[0]);}
+function tab(t){document.querySelectorAll('nav button').forEach(b=>b.classList.remove('on'));$('t_'+t).classList.add('on');V[t]();}
+const table=(cols,rows)=>'<table><tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+'</tr>'+rows.map(r=>'<tr>'+cols.map(c=>'<td>'+(r[c]??'')+'</td>').join('')+'</tr>').join('')+'</table>';
+const V={
+Dashboard(){run('dash').then(d=>{$('main').innerHTML='<div class="g">'+[['Active VIPs',d.customers],['Wallet funds',kes(d.funds)],["Today's sales",kes(d.sales)],["Today's credits",kes(d.credits)],['Transactions',d.txns],['Low balance',d.low]].map(x=>'<div class="k">'+x[0]+'<b>'+x[1]+'</b></div>').join('')+'</div><div class="card" style="margin-top:14px">Low-balance threshold: <input id="lb" size=6> <button class="s" onclick="run(\'setLow\',$(\'lb\').value).then(()=>alert(\'Saved\'))">Save</button> <button class="s" onclick="rec()">Run ledger check</button><div id="r"></div></div>';run('settings').then(s=>$('lb').value=s.LowBalance);});},
+Customers(){run('customers').then(c=>{$('main').innerHTML='<div class="card"><h3>Register VIP</h3><input id="n" placeholder="Full name"><input id="ph" placeholder="Phone"><input id="em" placeholder="Email"><select id="ge"><option>Male</option><option>Female</option></select><button class="p" onclick="addC()">Register</button><div id="m"></div></div><div class="card">'+table(['ID','Name','Phone','Email','Status','Balance'],c)+'</div><div class="card"><input id="sid" placeholder="VIP-000001"><select id="ss"><option>Active</option><option>Suspended</option><option>Blocked</option></select><button class="s" onclick="run(\'setStatus\',$(\'sid\').value,$(\'ss\').value).then(V.Customers)">Set status</button> <button class="s" onclick="stmt()">Statement</button><div id="st"></div></div>';});},
+Wallet(){$('main').innerHTML='<div class="card"><h3>Credit wallet</h3><input id="id" placeholder="VIP-000001"><input id="am" type="number" placeholder="Amount"><select id="me"><option>M-Pesa</option><option>Bank</option><option>Cash</option><option>Cheque</option><option>Other</option></select><input id="rf" placeholder="Reference e.g. MPESA-QK82L91"><button class="p" onclick="cr()">Credit</button><div id="m"></div></div>';},
+Menu(){run('allMenu').then(m=>{$('main').innerHTML='<div class="card"><h3>Add / edit item</h3><input id="mid" placeholder="ID (blank = new)" size=8><input id="mn" placeholder="Name"><input id="mc" placeholder="Category"><input id="mp" type="number" placeholder="Price"><select id="ma"><option>YES</option><option>NO</option></select><button class="p" onclick="si()">Save</button><div id="m"></div></div><div class="card">'+table(['ID','Name','Category','Price','Active'],m)+'</div>';});},
+Cashiers(){run('cashiers').then(c=>{$('main').innerHTML='<div class="card"><h3>Create / update cashier</h3><input id="cc" placeholder="Code (blank = new)" size=9><input id="cn" placeholder="Name"><input id="ce" placeholder="Email"><input id="cp" placeholder="PIN"><select id="ca"><option>YES</option><option>NO</option></select><button class="p" onclick="sc()">Save</button><div id="m"></div></div><div class="card">'+table(['Code','Name','Email','Active'],c)+'</div>';});},
+Sales(){run('sales').then(s=>{s.forEach(x=>x.Action=x.Status==='OK'?'<button class="s" onclick="vs(\''+x.SaleID+'\')">Reverse</button>':'');$('main').innerHTML='<div class="card">'+table(['SaleID','Time','CustomerID','Total','Cashier','Status','Action'],s)+'</div>';});},
+Audit(){run('audit').then(a=>$('main').innerHTML='<div class="card">'+table(['Time','User','Action'],a)+'</div>');},
+Bill(){CART={};CUST=null;run('menu').then(m=>{MENU=m;$('main').innerHTML='<div class="card"><input id="q" placeholder="Scan card / search name, phone" size=28><button class="p" onclick="fc()">Find</button><div id="cu"></div></div><div id="pos"></div><div id="m"></div>';$('q').focus();$('q').onkeydown=e=>{if(e.key==='Enter')fc();};});}
+};
+function rec(){run('reconcile').then(r=>$('r').innerHTML=r.length?table(['ID','Stored','Ledger'],r):'<div class="msg ok">All balances match the ledger.</div>');}
+function addC(){run('addCustomer',{Name:$('n').value,Phone:$('ph').value,Email:$('em').value,Gender:$('ge').value}).then(i=>{alert('Registered '+i);V.Customers();}).catch(e=>flash('m',e));}
+function stmt(){run('statement',$('sid').value).then(r=>$('st').innerHTML=table(['Time','Description','Type','Amount','After'],r)).catch(e=>flash('st',e));}
+function cr(){run('credit',$('id').value,$('am').value,$('me').value,$('rf').value).then(r=>flash('m','Wallet credited<br>'+r.name+': '+kes(r.before)+' → <b>'+kes(r.after)+'</b><br>Ref '+r.txn+'<br>Email: '+(r.emailSent?'Sent ✓':'FAILED ✗'),1)).catch(e=>flash('m',e));}
+function si(){run('saveItem',{ID:$('mid').value,Name:$('mn').value,Category:$('mc').value,Price:$('mp').value,Active:$('ma').value}).then(V.Menu).catch(e=>flash('m',e));}
+function sc(){run('saveCashier',{Code:$('cc').value,Name:$('cn').value,Email:$('ce').value,Pin:$('cp').value,Active:$('ca').value}).then(c=>{alert('Saved '+c);V.Cashiers();}).catch(e=>flash('m',e));}
+function vs(id){if(confirm('Reverse '+id+'?'))run('voidSale',id).then(V.Sales).catch(alert);}
+function fc(){run('find',$('q').value).then(r=>{if(!r.length)return flash('cu','Not found');CUST=r[0];
+ $('cu').innerHTML='<h3>'+CUST.ID+' — '+CUST.Name+'</h3>Status: '+CUST.Status+' · Wallet: <b>'+kes(CUST.Balance)+'</b>';pos();}).catch(e=>flash('cu',e));}
+function pos(){$('pos').innerHTML='<div class="card">'+MENU.map(m=>'<div style="display:flex;justify-content:space-between;padding:6px 0"><span>'+m.Name+' <small>('+m.Category+')</small> — '+kes(m.Price)+'</span><span><button class="s" onclick="ch(\''+m.ID+'\',-1)">−</button> <b id="q_'+m.ID+'">0</b> <button class="s" onclick="ch(\''+m.ID+'\',1)">+</button></span></div>').join('')+'<h3>Total: <span id="tot">KSh 0</span></h3><button class="p" onclick="pay()">Pay from Wallet</button></div>';}
+function ch(id,d){CART[id]=Math.max(0,(CART[id]||0)+d);$('q_'+id).textContent=CART[id];$('tot').textContent=kes(MENU.reduce((a,m)=>a+m.Price*(CART[m.ID]||0),0));}
+function pay(){const items=Object.keys(CART).filter(k=>CART[k]>0).map(k=>({id:k,qty:CART[k]}));
+ run('charge',CUST.ID,items).then(r=>{$('pos').innerHTML='';$('cu').innerHTML='';$('m').innerHTML='<div class="card" id="rc"><h3>NDUDES HOTEL – RECEIPT</h3>'+r.customer+' ('+CUST.ID+')<br>'+r.time+'<br>'+table(['Item','Qty','Total'],r.lines.map(l=>({Item:l.n,Qty:l.q,Total:l.p*l.q})))+'<h3>Total '+kes(r.total)+'</h3>Before '+kes(r.before)+' · Balance <b>'+kes(r.after)+'</b><br>'+r.txn+'<br>Email: '+(r.emailSent?'Sent ✓':'FAILED ✗')+'<br><br><button class="p" onclick="window.print()">Print</button> <button class="s" onclick="V.Bill()">New bill</button></div>';}).catch(e=>flash('m',e));}
+T?shell():loginView();
+</script></body></html>
